@@ -26,7 +26,10 @@ async def init_db():
     try:
         # Create client with a 2-second connection timeout for fast failover/fallback
         db_client = AsyncIOMotorClient(MONGODB_URI, serverSelectionTimeoutMS=2000)
-        db = db_client.get_default_database()
+        try:
+            db = db_client.get_default_database()
+        except Exception:
+            db = db_client.get_database("livospeak")
         
         # Ping database to verify connection
         await db_client.admin.command('ping')

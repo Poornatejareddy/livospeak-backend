@@ -83,9 +83,9 @@ def validate_audio_file(file_path: str, filename: str, mime_type: str) -> Tuple[
         
         duration = float(duration_str)
         
-        # English learners recording length condition: between 30 and 45 seconds.
-        if duration < 30.0 or duration > 45.0:
-            return False, f"Audio duration must be between 30 and 45 seconds. Your recording is {duration:.1f} seconds long.", duration
+        # English learners recording length condition: between 1 and 60 seconds.
+        if duration < 1.0 or duration > 60.0:
+            return False, f"Audio duration must be between 1 and 60 seconds. Your recording is {duration:.1f} seconds long.", duration
             
         return True, "", duration
     except subprocess.CalledProcessError as e:
