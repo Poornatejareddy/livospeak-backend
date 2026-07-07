@@ -8,7 +8,7 @@ from app.config import UPLOAD_DIR
 from app.services.audio import validate_audio_file
 from app.services.analyzer import analyze_speech
 from app.schemas.analysis import AnalysisResponse
-from app.db import init_db, save_analysis, get_analyses_history, get_analysis_detail
+from app.db import init_db, save_analysis, get_analyses_history, get_analysis_detail, delete_analysis
 
 # Setup logging
 logging.basicConfig(
@@ -156,4 +156,27 @@ async def get_history_detail(analysis_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve record detail."
+        )
+
+@app.delete(
+    "/api/history/{analysis_id}",
+    summary="Delete a speech analysis run from history",
+    description="Deletes a specific speaking session run by ID from the MongoDB database or In-Memory store."
+)
+async def delete_history_item(analysis_id: str):
+    try:
+        success = await delete_analysis(analysis_id)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Analysis record not found."
+            )
+        return {"success": True, "message": "Record deleted successfully."}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Failed to delete history item ({analysis_id}): {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete history item."
         )

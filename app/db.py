@@ -157,3 +157,31 @@ async def get_analysis_detail(analysis_id: str) -> Optional[Dict[str, Any]]:
             if doc.get("id") == analysis_id:
                 return doc
         return None
+
+async def delete_analysis(analysis_id: str) -> bool:
+    """
+    Deletes an analysis record by ID from MongoDB or in-memory array.
+    """
+    global in_memory_history
+    if use_in_memory:
+        original_len = len(in_memory_history)
+        in_memory_history = [doc for doc in in_memory_history if doc.get("id") != analysis_id]
+        logger.info(f"Deleted analysis from in-memory history (ID: {analysis_id})")
+        return len(in_memory_history) < original_len
+        
+    try:
+        if analysis_id.startswith("mem_"):
+            original_len = len(in_memory_history)
+            in_memory_history = [doc for doc in in_memory_history if doc.get("id") != analysis_id]
+            logger.info(f"Deleted analysis from in-memory history fallback (ID: {analysis_id})")
+            return len(in_memory_history) < original_len
+            
+        res = await db.analyses.delete_one({"_id": ObjectId(analysis_id)})
+        logger.info(f"Deleted analysis from MongoDB (ID: {analysis_id}, Status: {res.deleted_count > 0})")
+        return res.deleted_count > 0
+    except Exception as e:
+        logger.error(f"Failed to delete analysis {analysis_id} from MongoDB: {str(e)}")
+        # Try cleaning up from in-memory just in case
+        original_len = len(in_memory_history)
+        in_memory_history = [doc for doc in in_memory_history if doc.get("id") != analysis_id]
+        return len(in_memory_history) < original_len
