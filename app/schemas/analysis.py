@@ -38,6 +38,7 @@ class PracticePlan(BaseModel):
     five_minute_plan: List[str] = Field(..., description="Step-by-step daily practice routine")
 
 class AnalysisResponse(BaseModel):
+    id: Optional[str] = Field(None, description="Unique ID of the analysis record in database")
     success: bool = Field(True, description="Indicates if processing was successful")
     transcript: str = Field(..., description="Full speech transcription text")
     duration: float = Field(..., description="Calculated duration of the audio in seconds")

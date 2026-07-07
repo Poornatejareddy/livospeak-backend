@@ -8,6 +8,7 @@ from app.config import UPLOAD_DIR
 from app.services.audio import validate_audio_file
 from app.services.analyzer import analyze_speech
 from app.schemas.analysis import AnalysisResponse
+from app.db import init_db, save_analysis, get_analyses_history, get_analysis_detail
 
 # Setup logging
 logging.basicConfig(
@@ -24,6 +25,10 @@ app = FastAPI(
     description="Intelligent Pronunciation & Speaking Coach Backend API",
     version="1.0"
 )
+
+@app.on_event("startup")
+async def startup_event():
+    await init_db()
 
 # Configure CORS
 # Next.js usually runs on port 3000 by default, so we allow port 3000 and any common port
@@ -80,6 +85,13 @@ async def analyze_audio(file: UploadFile = File(...)):
         analysis_result = analyze_speech(file_path=temp_file_path, duration=duration)
         logger.info("Speech analysis completed successfully.")
         
+        # 4.5. Save analysis result to history database
+        try:
+            analysis_id = await save_analysis(analysis_result)
+            analysis_result["id"] = analysis_id
+        except Exception as db_save_error:
+            logger.error(f"Failed to record analysis to database: {str(db_save_error)}")
+        
         return analysis_result
 
     except HTTPException as he:
@@ -106,3 +118,42 @@ async def analyze_audio(file: UploadFile = File(...)):
                 logger.info(f"Privacy clean-up: Temp file {temp_file_path} deleted successfully.")
             except Exception as cleanup_error:
                 logger.error(f"Failed to delete temp file {temp_file_path}: {str(cleanup_error)}")
+
+@app.get(
+    "/api/history",
+    summary="Get speech analysis history list",
+    description="Returns a list of the 15 most recent speech analysis runs, including overall score, WPM, and timestamp."
+)
+async def get_history():
+    try:
+        return await get_analyses_history()
+    except Exception as e:
+        logger.error(f"Failed to fetch history list: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve history."
+        )
+
+@app.get(
+    "/api/history/{analysis_id}",
+    response_model=AnalysisResponse,
+    summary="Get detailed analysis result by ID",
+    description="Fetches the full speech analysis details for a previous recording using its unique ID."
+)
+async def get_history_detail(analysis_id: str):
+    try:
+        detail = await get_analysis_detail(analysis_id)
+        if not detail:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Analysis record not found."
+            )
+        return detail
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Failed to fetch history detail for {analysis_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve record detail."
+        )

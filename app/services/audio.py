@@ -51,19 +51,44 @@ def validate_audio_file(file_path: str, filename: str, mime_type: str) -> Tuple[
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
         duration_str = result.stdout.strip()
         
-        if not duration_str:
+        # If duration is "N/A" (common for browser-native WebM/OGG streams), remux to WAV to compute duration
+        if not duration_str or duration_str.upper() == "N/A":
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("Duration reported as N/A. Remuxing to standard WAV to calculate length.")
+            
+            temp_wav = file_path + ".wav"
+            try:
+                subprocess.run([
+                    "ffmpeg", "-y", "-i", file_path, "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", temp_wav
+                ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                
+                result_wav = subprocess.run([
+                    "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", temp_wav
+                ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+                duration_str = result_wav.stdout.strip()
+                
+                # Replace original file with standardized WAV
+                os.replace(temp_wav, file_path)
+            except Exception as remux_err:
+                logger.error(f"Failed to remux file for duration parsing: {str(remux_err)}")
+                if os.path.exists(temp_wav):
+                    try:
+                        os.remove(temp_wav)
+                    except:
+                        pass
+        
+        if not duration_str or duration_str.upper() == "N/A":
             return False, "Could not extract duration. The file might be corrupted or not a valid audio format.", 0.0
         
         duration = float(duration_str)
         
         # English learners recording length condition: between 30 and 45 seconds.
-        # We allow a tiny 0.5-second buffer (e.g., 29.5 to 45.5 seconds) to be user-friendly,
-        # but let's stick to the 30-45 second range.
         if duration < 30.0 or duration > 45.0:
             return False, f"Audio duration must be between 30 and 45 seconds. Your recording is {duration:.1f} seconds long.", duration
             
         return True, "", duration
     except subprocess.CalledProcessError as e:
-        return False, f"Failed to parse audio file. Ensure it is a valid MP3, WAV, or M4A file. Error: {e.stderr.strip()}", 0.0
+        return False, f"Failed to parse audio file. Ensure it is a valid MP3, WAV, WebM or M4A file. Error: {e.stderr.strip()}", 0.0
     except Exception as e:
         return False, f"An unexpected error occurred during audio validation: {str(e)}", 0.0
