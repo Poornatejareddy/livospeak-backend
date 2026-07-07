@@ -1,0 +1,8 @@
+venv/
+.env
+temp_uploads/
+__pycache__/
+*.pyc
+.pytest_cache/
+test_35s.wav
+create_dummy_wav.py
