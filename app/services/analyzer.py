@@ -114,8 +114,8 @@ def analyze_speech(file_path: str, duration: float) -> Dict[str, Any]:
             })
 
     # 6. Identify low confidence words (Mistakes)
-    # Words with confidence score < 0.82 are flagged
-    low_confidence_threshold = 0.82
+    # Words with confidence score < 0.88 are flagged as candidate pronunciation issues
+    low_confidence_threshold = 0.88
     low_confidence_words = []
     for w in all_words:
         # Strip punctuation for cleaner display and comparison
@@ -130,14 +130,33 @@ def analyze_speech(file_path: str, duration: float) -> Dict[str, Any]:
     low_confidence_words_sorted = sorted(low_confidence_words, key=lambda x: x["confidence"])
     words_for_llm = low_confidence_words_sorted[:5]
 
-    # 7. Calculate Scores
+    # 7. Call Groq LLM for mistakes details (IPA, why it matters, practice) and coaching
+    # Passing the words_for_llm list (top 5 worst pronounced) to avoid token bloat and keep it highly relevant
+    coaching_result = generate_coaching_feedback(
+        transcript=transcript_text,
+        wpm=wpm,
+        low_confidence_words=words_for_llm
+    )
+    
+    actual_mistakes = coaching_result.get("mistakes", [])
+    num_mistakes = len(actual_mistakes)
+
+    # 8. Mark words as mistakes in the main transcript if they match LLM mistakes
+    mistake_words_set = {m["word"].lower().strip(".,!?;:\"()[]{}") for m in actual_mistakes}
+    for w in all_words:
+        clean_w = w["word"].lower().strip(".,!?;:\"()[]{}")
+        if clean_w in mistake_words_set:
+            w["is_mistake"] = True
+
+    # 9. Calculate Scores (rigorous and adjusted by identified mistakes)
     # Pronunciation score: average confidence of all words
     confidences = [w["confidence"] for w in all_words]
     avg_confidence = sum(confidences) / total_words if total_words > 0 else 0.85
     
     # Scale: a confidence of 0.90 -> 90%, a confidence of 0.60 -> 60%
-    # We apply a scaling function to make scores realistic and motivating (40 to 98)
+    # We apply a scaling function and then deduct for actual mistakes to match learner expectations
     pronunciation_score = int(45 + (avg_confidence * 53))
+    pronunciation_score -= min(30, num_mistakes * 6)  # Deduct 6 points per mistake
     pronunciation_score = max(35, min(99, pronunciation_score))
 
     # Fluency score: based on WPM and pauses
@@ -156,10 +175,12 @@ def analyze_speech(file_path: str, duration: float) -> Dict[str, Any]:
     low_conf_count = len(low_confidence_words)
     clarity_ratio = (total_words - low_conf_count) / total_words if total_words > 0 else 0.8
     clarity_score = int(40 + (clarity_ratio * 58))
+    clarity_score -= min(25, num_mistakes * 5)  # Deduct 5 points per mistake
     clarity_score = max(35, min(99, clarity_score))
 
     # Confidence score: average of the confidences directly mapped to percentage
     confidence_score = int(avg_confidence * 100)
+    confidence_score -= min(20, num_mistakes * 4)
     confidence_score = max(30, min(99, confidence_score))
 
     # Overall Score: weighted average of the core metrics
@@ -170,17 +191,6 @@ def analyze_speech(file_path: str, duration: float) -> Dict[str, Any]:
     )
     overall_score = max(35, min(99, overall_score))
 
-    # 8. Call Groq LLM for mistakes details (IPA, why it matters, practice) and coaching
-    # Passing the words_for_llm list (top 5 worst pronounced) to avoid token bloat and keep it highly relevant
-    coaching_result = generate_coaching_feedback(
-        transcript=transcript_text,
-        wpm=wpm,
-        low_confidence_words=words_for_llm
-    )
-
-    # 9. Clean up words list in final response (e.g. limit structure to prevent bloating response)
-    # We will mark which words in the full list were flagged as mistakes so the UI can highlight them!
-    
     # 10. Assemble final response
     return {
         "success": True,
@@ -198,7 +208,7 @@ def analyze_speech(file_path: str, duration: float) -> Dict[str, Any]:
             "label": speed_label
         },
         "words": all_words,
-        "mistakes": coaching_result.get("mistakes", []),
+        "mistakes": actual_mistakes,
         "coaching": coaching_result.get("coaching", {
             "strengths": "Good voice projection and steady pacing.",
             "weaknesses": "Some unclear vowel sounds in multi-syllabic words.",

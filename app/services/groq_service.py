@@ -73,20 +73,24 @@ def generate_coaching_feedback(
     words_list_str = ", ".join([f"'{w['word']}' (confidence: {w['confidence']:.2f})" for w in low_confidence_words])
     
     prompt = f"""
-You are an expert English Pronunciation and Speech Coach. An English learner has uploaded a 30-45 second speech recording.
+You are an expert English Pronunciation and Speech Coach. An English learner has uploaded a speech recording.
 Here is the transcript of their speech:
 "{transcript}"
 
 The speaker's speech rate was calculated at: {wpm} WPM (Words Per Minute).
-Here are the words flagged with low transcription confidence (which indicates potential pronunciation issues):
+Here are the candidate words flagged with low transcription confidence (indicating potential pronunciation issues):
 [{words_list_str}]
 
-Your task is to analyze this speech and generate highly detailed pronunciation coaching.
-You must focus on the low confidence words, identify their likely pronunciation errors, and provide:
-1. An explanation of the pronunciation issue.
-2. The expected pronunciation in standard IPA notation.
-3. The reason "why it matters" (the linguistic reason or phonetic breakdown, e.g., missing syllables, wrong vowel quality, incorrect word stress).
-4. A few practice phrases for each word.
+Your task is to analyze this speech and generate highly detailed, realistic, and rigorous pronunciation coaching. 
+To ensure high accuracy, do not be overly generous:
+1. Identify up to 5 words that were likely mispronounced. Focus primarily on the low confidence words, but you can also identify other words in the transcript that are commonly mispronounced (e.g. silent letters like 'receipt', syllable compression like 'comfortable', wrong word stress, or phoneme errors) if the candidate list is empty or insufficient.
+2. For each identified word, provide:
+   - "word": The word as it appears in the transcript.
+   - "issue": A brief description of the specific pronunciation error (e.g., "silent 'p' pronounced", "wrong vowel quality", "misplaced word stress").
+   - "expected_pronunciation": The expected pronunciation in standard IPA notation (e.g., "/ˈkʌmf.tə.bəl/").
+   - "why_it_matters": The linguistic explanation of why the correct pronunciation matters (e.g. vowel shifts, syllable count, syllable stress).
+   - "practice": 3 short practice phrases containing the word.
+3. If the user spoke perfectly, you can leave the "mistakes" list empty (or with only 1 minor suggestion). But be rigorous.
 
 Also generate strengths, weaknesses, overall actionable advice, and a 5-minute practice plan.
 
